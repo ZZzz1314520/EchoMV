@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .lyrics import demo_lyrics, fetch_lrclib_lyrics
+from .lyrics import demo_lyrics, fetch_lyrics, lyrics_cache_key
 from .models import (
     FavoriteCreate,
     HistoryCreate,
@@ -87,10 +87,18 @@ async def resolve(request: ResolveRequest) -> ResolvedMedia:
 
 @app.get("/api/lyrics", response_model=LyricsResponse)
 async def lyrics(title: str, artist: str | None = None, duration: int | None = None) -> LyricsResponse:
+    cache_key = lyrics_cache_key(title, artist, duration)
+    cached = store.read_lyrics_cache(cache_key)
+    if cached:
+        return cached
+
     try:
-        return await fetch_lrclib_lyrics(title, artist, duration)
+        response = await fetch_lyrics(title, artist, duration)
     except Exception:
-        return demo_lyrics(title, artist)
+        response = demo_lyrics(title, artist)
+    if response.source != "demo":
+        store.write_lyrics_cache(cache_key, response)
+    return response
 
 
 @app.post("/api/history")

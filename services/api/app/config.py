@@ -19,6 +19,10 @@ class Settings:
         in {"1", "true", "yes", "on"}
     )
     search_cache_ttl_seconds: int = int(os.getenv("ECHOMV_SEARCH_CACHE_TTL_SECONDS", "900"))
+    enable_netease_lyrics: bool = (
+        os.getenv("ECHOMV_ENABLE_NETEASE_LYRICS", "true").lower()
+        in {"1", "true", "yes", "on"}
+    )
 
 
 settings = Settings()

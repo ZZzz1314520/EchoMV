@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:echomv_flutter/main.dart';
 import 'package:echomv_flutter/src/api_client.dart';
 import 'package:echomv_flutter/src/app_controller.dart';
 import 'package:echomv_flutter/src/models.dart';
-import 'package:echomv_flutter/main.dart';
 
 void main() {
   testWidgets('EchoMV app shell renders', (WidgetTester tester) async {

@@ -5,7 +5,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from .models import SearchResult
+from .models import LyricsResponse, SearchResult
 
 
 class Store:
@@ -35,6 +35,11 @@ class Store:
                     played_at text not null
                 );
                 create table if not exists search_cache (
+                    cache_key text primary key,
+                    payload text not null,
+                    created_at text not null
+                );
+                create table if not exists lyrics_cache (
                     cache_key text primary key,
                     payload text not null,
                     created_at text not null
@@ -106,3 +111,28 @@ class Store:
     def clear_search_cache(self) -> None:
         with self._connect() as db:
             db.execute("delete from search_cache")
+
+    def read_lyrics_cache(self, cache_key: str) -> LyricsResponse | None:
+        with self._connect() as db:
+            row = db.execute(
+                "select payload from lyrics_cache where cache_key = ?",
+                (cache_key,),
+            ).fetchone()
+        if not row:
+            return None
+        return LyricsResponse.model_validate_json(row["payload"])
+
+    def write_lyrics_cache(self, cache_key: str, lyrics: LyricsResponse) -> None:
+        with self._connect() as db:
+            db.execute(
+                "insert or replace into lyrics_cache (cache_key, payload, created_at) values (?, ?, ?)",
+                (
+                    cache_key,
+                    lyrics.model_dump_json(by_alias=True),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+
+    def clear_lyrics_cache(self) -> None:
+        with self._connect() as db:
+            db.execute("delete from lyrics_cache")

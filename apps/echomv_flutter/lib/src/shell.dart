@@ -503,7 +503,12 @@ class LyricPanel extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            if (state.lyrics.isEmpty)
+            if (state.isLoadingLyrics)
+              const SizedBox(
+                height: 160,
+                child: Center(child: Text('歌词加载中...')),
+              )
+            else if (state.lyrics.isEmpty)
               const SizedBox(
                 height: 160,
                 child: Center(child: Text('未找到同步歌词')),

@@ -21,3 +21,4 @@ def test_search_resolve_and_lyrics_contracts():
     assert lyrics.status_code == 200
     payload = lyrics.json()
     assert {"title", "confidence", "source", "lines"} <= set(payload)
+    assert payload["source"] in {"lrclib", "netease", "demo"}

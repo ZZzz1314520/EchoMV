@@ -15,6 +15,58 @@ final echoControllerProvider =
   return EchoController(ref.read(apiClientProvider), ref.read(localStoreProvider));
 });
 
+typedef EchoAudioPlayerFactory = EchoAudioPlayer Function();
+
+abstract class EchoAudioPlayer {
+  Stream<Duration> get positionStream;
+  Stream<Duration> get durationStream;
+  Stream<bool> get playingStream;
+
+  Future<void> open(ResolvedMedia media);
+  Future<void> play();
+  Future<void> pause();
+  Future<void> seek(Duration position);
+  Future<void> dispose();
+}
+
+class MediaKitEchoAudioPlayer implements EchoAudioPlayer {
+  MediaKitEchoAudioPlayer() : _player = Player();
+
+  final Player _player;
+
+  @override
+  Stream<Duration> get positionStream => _player.stream.position;
+
+  @override
+  Stream<Duration> get durationStream => _player.stream.duration;
+
+  @override
+  Stream<bool> get playingStream => _player.stream.playing;
+
+  @override
+  Future<void> open(ResolvedMedia media) {
+    return _player.open(
+      Media(
+        media.streamUrl,
+        httpHeaders: media.requestHeaders.isEmpty ? null : media.requestHeaders,
+      ),
+      play: true,
+    );
+  }
+
+  @override
+  Future<void> play() => _player.play();
+
+  @override
+  Future<void> pause() => _player.pause();
+
+  @override
+  Future<void> seek(Duration position) => _player.seek(position);
+
+  @override
+  Future<void> dispose() => _player.dispose();
+}
+
 class EchoState {
   const EchoState({
     this.query = '',
@@ -30,6 +82,7 @@ class EchoState {
     this.isPlaying = false,
     this.isSearching = false,
     this.isResolving = false,
+    this.isLoadingLyrics = false,
     this.error,
   });
 
@@ -46,6 +99,7 @@ class EchoState {
   final bool isPlaying;
   final bool isSearching;
   final bool isResolving;
+  final bool isLoadingLyrics;
   final String? error;
 
   int get activeLyricIndex {
@@ -81,6 +135,7 @@ class EchoState {
     bool? isPlaying,
     bool? isSearching,
     bool? isResolving,
+    bool? isLoadingLyrics,
     String? error,
     bool clearError = false,
   }) {
@@ -98,36 +153,44 @@ class EchoState {
       isPlaying: isPlaying ?? this.isPlaying,
       isSearching: isSearching ?? this.isSearching,
       isResolving: isResolving ?? this.isResolving,
+      isLoadingLyrics: isLoadingLyrics ?? this.isLoadingLyrics,
       error: clearError ? null : error ?? this.error,
     );
   }
 }
 
 class EchoController extends StateNotifier<EchoState> {
-  EchoController(this._api, this._store) : super(const EchoState()) {
-    refreshCollections();
+  EchoController(
+    this._api,
+    this._store, {
+    EchoAudioPlayerFactory? audioPlayerFactory,
+  })  : _audioPlayerFactory = audioPlayerFactory ?? MediaKitEchoAudioPlayer.new,
+        super(const EchoState()) {
+    unawaited(refreshCollections());
   }
 
   final EchoApiClient _api;
   final LocalStore _store;
-  Player? _player;
+  final EchoAudioPlayerFactory _audioPlayerFactory;
+  EchoAudioPlayer? _player;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration>? _durationSub;
   StreamSubscription<bool>? _playingSub;
+  var _playRequestId = 0;
 
-  Player _ensurePlayer() {
+  EchoAudioPlayer _ensurePlayer() {
     final existing = _player;
     if (existing != null) return existing;
 
-    final player = Player();
+    final player = _audioPlayerFactory();
     _player = player;
-    _positionSub = player.stream.position.listen((position) {
+    _positionSub = player.positionStream.listen((position) {
       state = state.copyWith(position: position);
     });
-    _durationSub = player.stream.duration.listen((duration) {
+    _durationSub = player.durationStream.listen((duration) {
       state = state.copyWith(duration: duration);
     });
-    _playingSub = player.stream.playing.listen((playing) {
+    _playingSub = player.playingStream.listen((playing) {
       state = state.copyWith(isPlaying: playing);
     });
     return player;
@@ -149,42 +212,70 @@ class EchoController extends StateNotifier<EchoState> {
   }
 
   Future<void> play(SearchResult item) async {
+    final requestId = ++_playRequestId;
     state = state.copyWith(
       current: item,
       isResolving: true,
+      isLoadingLyrics: true,
       clearMedia: true,
       lyrics: const [],
       position: Duration.zero,
+      duration: Duration.zero,
+      isPlaying: false,
       clearError: true,
     );
+    unawaited(_loadLyricsFor(item, requestId));
+
     try {
-      final values = await Future.wait([
-        _api.resolve(item),
-        _api.lyrics(item),
-      ]);
-      final media = values[0] as ResolvedMedia;
-      final lyrics = values[1] as LyricsResponse;
+      final media = await _api.resolve(item);
+      if (!_isActivePlayback(requestId, item)) return;
+
       final offsets = await _store.lyricOffsets();
-      await _ensurePlayer().open(
-        Media(
-          media.streamUrl,
-          httpHeaders:
-              media.requestHeaders.isEmpty ? null : media.requestHeaders,
-        ),
-        play: true,
-      );
-      await _api.recordHistory(item);
-      await _store.rememberSearchResult(item);
+      if (!_isActivePlayback(requestId, item)) return;
+
+      await _ensurePlayer().open(media);
+      if (!_isActivePlayback(requestId, item)) return;
+
       state = state.copyWith(
         media: media,
-        lyrics: lyrics.lines,
         lyricOffsetMs: offsets[item.id] ?? 0,
         isResolving: false,
       );
-      unawaited(refreshCollections());
+      unawaited(_recordPlayback(item));
     } catch (error) {
-      state = state.copyWith(isResolving: false, error: '播放准备失败：$error');
+      if (_isActivePlayback(requestId, item)) {
+        state = state.copyWith(
+          isResolving: false,
+          isLoadingLyrics: false,
+          error: '播放准备失败：$error',
+        );
+      }
     }
+  }
+
+  bool _isActivePlayback(int requestId, SearchResult item) {
+    return requestId == _playRequestId && state.current?.id == item.id;
+  }
+
+  Future<void> _loadLyricsFor(SearchResult item, int requestId) async {
+    try {
+      final lyrics = await _api.lyrics(item);
+      if (!_isActivePlayback(requestId, item)) return;
+      state = state.copyWith(lyrics: lyrics.lines, isLoadingLyrics: false);
+    } catch (_) {
+      if (!_isActivePlayback(requestId, item)) return;
+      state = state.copyWith(lyrics: const [], isLoadingLyrics: false);
+    }
+  }
+
+  Future<void> _recordPlayback(SearchResult item) async {
+    try {
+      await _api.recordHistory(item);
+    } catch (_) {
+      // Local recents still keep the UI useful if the backend is unavailable.
+    }
+    await _store.rememberSearchResult(item);
+    await refreshCollections();
   }
 
   Future<void> togglePlay() async {
@@ -241,7 +332,10 @@ class EchoController extends StateNotifier<EchoState> {
     _positionSub?.cancel();
     _durationSub?.cancel();
     _playingSub?.cancel();
-    _player?.dispose();
+    final player = _player;
+    if (player != null) {
+      unawaited(player.dispose());
+    }
     super.dispose();
   }
 }

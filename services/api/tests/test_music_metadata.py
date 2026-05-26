@@ -6,3 +6,10 @@ def test_infer_track_and_artist_from_noisy_mv_title():
 
     assert title == "晴天"
     assert artist == "周杰伦"
+
+
+def test_infer_track_and_artist_from_plain_title():
+    title, artist = infer_track_and_artist("周杰伦 - 晴天 官方MV 2160P")
+
+    assert title == "晴天"
+    assert artist == "周杰伦"
