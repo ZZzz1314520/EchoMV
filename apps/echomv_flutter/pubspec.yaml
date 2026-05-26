@@ -1,0 +1,28 @@
+name: echomv_flutter
+description: EchoMV cross-platform music player prototype.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  dio: ^5.7.0
+  flutter_riverpod: ^2.6.1
+  go_router: ^14.6.2
+  media_kit: ^1.1.11
+  media_kit_libs_audio: ^1.0.5
+  shared_preferences: ^2.3.3
+  media_kit_libs_windows_audio: ^1.0.9
+  media_kit_libs_android_audio: ^1.3.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
