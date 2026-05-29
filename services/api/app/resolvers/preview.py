@@ -9,6 +9,7 @@ from .base import MediaResolver
 from ..models import ResolveRequest, ResolvedMedia
 from ..music_metadata import clean_music_term, looks_like_video_uploader
 from ..scoring import normalize_text
+from ..waveform import analyze_waveform_peaks
 
 
 class NoPreviewFound(RuntimeError):
@@ -52,6 +53,7 @@ async def _search_itunes_preview(
     if not selected:
         return None
 
+    fallback_peaks = _synthetic_peaks(selected.get("trackName") or term)
     return ResolvedMedia(
         streamUrl=selected["previewUrl"],
         mimeType="audio/mp4",
@@ -60,7 +62,10 @@ async def _search_itunes_preview(
         isExperimental=False,
         externalPageUrl=selected.get("trackViewUrl"),
         requestHeaders={},
-        waveformPeaks=_synthetic_peaks(selected.get("trackName") or term),
+        waveformPeaks=await analyze_waveform_peaks(
+            selected["previewUrl"],
+            fallback=fallback_peaks,
+        ),
     )
 
 

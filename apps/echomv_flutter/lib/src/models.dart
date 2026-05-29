@@ -50,6 +50,54 @@ class SearchResult {
       };
 }
 
+class Playlist {
+  const Playlist({
+    required this.id,
+    required this.name,
+    required this.items,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String name;
+  final List<SearchResult> items;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory Playlist.fromJson(Map<String, dynamic> json) => Playlist(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        items: (json['items'] as List<dynamic>? ?? const [])
+            .map((item) => SearchResult.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        updatedAt: DateTime.parse(json['updatedAt'] as String),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'items': items.map((item) => item.toJson()).toList(),
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+      };
+
+  Playlist copyWith({
+    String? name,
+    List<SearchResult>? items,
+    DateTime? updatedAt,
+  }) {
+    return Playlist(
+      id: id,
+      name: name ?? this.name,
+      items: items ?? this.items,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+}
+
 class ResolvedMedia {
   const ResolvedMedia({
     required this.streamUrl,

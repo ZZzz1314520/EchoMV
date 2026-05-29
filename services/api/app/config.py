@@ -19,6 +19,9 @@ class Settings:
         in {"1", "true", "yes", "on"}
     )
     search_cache_ttl_seconds: int = int(os.getenv("ECHOMV_SEARCH_CACHE_TTL_SECONDS", "900"))
+    ffmpeg_path: str | None = os.getenv("ECHOMV_FFMPEG_PATH") or None
+    waveform_timeout_seconds: float = float(os.getenv("ECHOMV_WAVEFORM_TIMEOUT_SECONDS", "6"))
+    waveform_buckets: int = int(os.getenv("ECHOMV_WAVEFORM_BUCKETS", "96"))
     enable_netease_lyrics: bool = (
         os.getenv("ECHOMV_ENABLE_NETEASE_LYRICS", "true").lower()
         in {"1", "true", "yes", "on"}

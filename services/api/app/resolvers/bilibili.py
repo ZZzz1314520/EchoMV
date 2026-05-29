@@ -8,6 +8,7 @@ import httpx
 from .base import MediaResolver
 from .preview import NoPreviewFound
 from ..models import ResolveRequest, ResolvedMedia
+from ..waveform import analyze_waveform_peaks
 
 
 BROWSER_USER_AGENT = (
@@ -66,6 +67,10 @@ class BilibiliAudioResolver(MediaResolver):
         if not stream_url:
             raise NoPreviewFound("Bilibili audio stream URL was empty.")
 
+        request_headers = {
+            "User-Agent": BROWSER_USER_AGENT,
+            "Referer": page_url,
+        }
         return ResolvedMedia(
             streamUrl=stream_url,
             mimeType=audio.get("mimeType") or audio.get("mime_type") or "audio/mp4",
@@ -73,11 +78,12 @@ class BilibiliAudioResolver(MediaResolver):
             source="bilibili-audio",
             isExperimental=True,
             externalPageUrl=page_url,
-            requestHeaders={
-                "User-Agent": BROWSER_USER_AGENT,
-                "Referer": page_url,
-            },
-            waveformPeaks=_synthetic_peaks(request.video_id),
+            requestHeaders=request_headers,
+            waveformPeaks=await analyze_waveform_peaks(
+                stream_url,
+                request_headers,
+                fallback=_synthetic_peaks(request.video_id),
+            ),
         )
 
 

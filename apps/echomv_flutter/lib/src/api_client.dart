@@ -7,7 +7,20 @@ const defaultApiBase = String.fromEnvironment(
   defaultValue: 'http://127.0.0.1:8787',
 );
 
-class EchoApiClient {
+const localOnlyMode = bool.fromEnvironment('ECHOMV_LOCAL_ONLY');
+
+abstract class EchoDataSource {
+  Future<List<SearchResult>> search(String query);
+  Future<ResolvedMedia> resolve(SearchResult item);
+  Future<LyricsResponse> lyrics(SearchResult item);
+  Future<void> recordHistory(SearchResult item);
+  Future<void> addFavorite(SearchResult item);
+  Future<void> removeFavorite(String id);
+  Future<List<SearchResult>> favorites();
+  Future<List<SearchResult>> history();
+}
+
+class EchoApiClient implements EchoDataSource {
   EchoApiClient({Dio? dio})
       : _dio = dio ??
             Dio(
@@ -20,6 +33,7 @@ class EchoApiClient {
 
   final Dio _dio;
 
+  @override
   Future<List<SearchResult>> search(String query) async {
     final response = await _dio.get<List<dynamic>>(
       '/api/search',
@@ -30,6 +44,7 @@ class EchoApiClient {
         .toList();
   }
 
+  @override
   Future<ResolvedMedia> resolve(SearchResult item) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/resolve',
@@ -38,6 +53,7 @@ class EchoApiClient {
     return ResolvedMedia.fromJson(response.data!);
   }
 
+  @override
   Future<LyricsResponse> lyrics(SearchResult item) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/lyrics',
@@ -50,18 +66,22 @@ class EchoApiClient {
     return LyricsResponse.fromJson(response.data!);
   }
 
+  @override
   Future<void> recordHistory(SearchResult item) async {
     await _dio.post('/api/history', data: {'item': item.toJson()});
   }
 
+  @override
   Future<void> addFavorite(SearchResult item) async {
     await _dio.post('/api/favorites', data: {'item': item.toJson()});
   }
 
+  @override
   Future<void> removeFavorite(String id) async {
     await _dio.delete('/api/favorites/$id');
   }
 
+  @override
   Future<List<SearchResult>> favorites() async {
     final response = await _dio.get<List<dynamic>>('/api/favorites');
     return (response.data ?? const [])
@@ -69,6 +89,7 @@ class EchoApiClient {
         .toList();
   }
 
+  @override
   Future<List<SearchResult>> history() async {
     final response = await _dio.get<List<dynamic>>('/api/history');
     return (response.data ?? const [])

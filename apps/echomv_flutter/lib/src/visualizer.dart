@@ -6,10 +6,14 @@ class AudioVisualizer extends StatefulWidget {
   const AudioVisualizer({
     super.key,
     required this.isPlaying,
+    required this.position,
+    required this.duration,
     this.peaks,
   });
 
   final bool isPlaying;
+  final Duration position;
+  final Duration duration;
   final List<double>? peaks;
 
   @override
@@ -26,7 +30,20 @@ class _AudioVisualizerState extends State<AudioVisualizer>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
-    )..repeat();
+    );
+    if (widget.isPlaying) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant AudioVisualizer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isPlaying && !_controller.isAnimating) {
+      _controller.repeat();
+    } else if (!widget.isPlaying && _controller.isAnimating) {
+      _controller.stop();
+    }
   }
 
   @override
@@ -43,6 +60,7 @@ class _AudioVisualizerState extends State<AudioVisualizer>
         return CustomPaint(
           painter: _VisualizerPainter(
             progress: _controller.value,
+            playbackProgress: _playbackProgress,
             isPlaying: widget.isPlaying,
             peaks: widget.peaks,
             color: Theme.of(context).colorScheme.primary,
@@ -53,11 +71,18 @@ class _AudioVisualizerState extends State<AudioVisualizer>
       },
     );
   }
+
+  double get _playbackProgress {
+    final total = widget.duration.inMilliseconds;
+    if (total <= 0) return 0;
+    return (widget.position.inMilliseconds / total).clamp(0.0, 1.0);
+  }
 }
 
 class _VisualizerPainter extends CustomPainter {
   const _VisualizerPainter({
     required this.progress,
+    required this.playbackProgress,
     required this.isPlaying,
     required this.peaks,
     required this.color,
@@ -65,6 +90,7 @@ class _VisualizerPainter extends CustomPainter {
   });
 
   final double progress;
+  final double playbackProgress;
   final bool isPlaying;
   final List<double>? peaks;
   final Color color;
@@ -78,6 +104,11 @@ class _VisualizerPainter extends CustomPainter {
         ? peaks!
         : List<double>.generate(36, (i) => 0.35 + math.sin(i * 0.7) * 0.24);
     final count = math.max(36, values.length * 3);
+    final playbackIndex = values.isEmpty
+        ? 0
+        : (playbackProgress * values.length)
+            .floor()
+            .clamp(0, values.length - 1);
 
     final ringPaint = Paint()
       ..style = PaintingStyle.stroke
@@ -86,10 +117,15 @@ class _VisualizerPainter extends CustomPainter {
     canvas.drawCircle(center, radius, ringPaint);
 
     for (var i = 0; i < count; i++) {
-      final angle = (i / count) * math.pi * 2 + progress * math.pi * 2;
-      final peak = values[i % values.length];
-      final pulse = isPlaying ? (0.75 + 0.25 * math.sin(progress * 8 + i)) : 0.35;
-      final length = 12 + peak * 34 * pulse;
+      final angle = (i / count) * math.pi * 2;
+      final sampleIndex = (playbackIndex + i - count ~/ 2) % values.length;
+      final peak =
+          values[sampleIndex < 0 ? sampleIndex + values.length : sampleIndex];
+      final distanceFromPlayhead = (i - count / 2).abs() / (count / 2);
+      final focus = 1 - distanceFromPlayhead.clamp(0.0, 1.0);
+      final pulse =
+          isPlaying ? (0.9 + 0.1 * math.sin(progress * 12 + i * 0.3)) : 0.72;
+      final length = 10 + peak * (24 + focus * 22) * pulse;
       final start = Offset(
         center.dx + math.cos(angle) * radius,
         center.dy + math.sin(angle) * radius,
@@ -109,6 +145,7 @@ class _VisualizerPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _VisualizerPainter oldDelegate) {
     return progress != oldDelegate.progress ||
+        playbackProgress != oldDelegate.playbackProgress ||
         isPlaying != oldDelegate.isPlaying ||
         peaks != oldDelegate.peaks;
   }

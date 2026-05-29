@@ -4,6 +4,8 @@ from html import unescape
 import re
 from urllib.parse import quote_plus
 
+import httpx
+
 from .base import VideoSourceProvider
 from ..models import SearchResult
 from ..scoring import score_result
@@ -13,8 +15,6 @@ class BilibiliProvider(VideoSourceProvider):
     source = "bilibili"
 
     async def search(self, query: str, limit: int = 8) -> list[SearchResult]:
-        import httpx
-
         url = (
             "https://api.bilibili.com/x/web-interface/search/type"
             f"?search_type=video&keyword={quote_plus(query)}&page=1"
@@ -36,41 +36,41 @@ class BilibiliProvider(VideoSourceProvider):
             except httpx.HTTPStatusError:
                 return await _search_html(client, query, limit)
 
-        payload = response.json()
-        if payload.get("code") != 0:
-            return await _search_html(client, query, limit)
+            payload = response.json()
+            if payload.get("code") != 0:
+                return await _search_html(client, query, limit)
 
-        data = payload.get("data", {})
-        raw_results = data.get("result") or []
-        results: list[SearchResult] = []
-        for raw in raw_results:
-            if len(results) >= limit:
-                break
-            bvid = raw.get("bvid")
-            if not isinstance(bvid, str) or not bvid.startswith("BV"):
-                continue
-            title = _strip_html(raw.get("title") or "")
-            duration = _parse_duration(raw.get("duration"))
-            confidence, tags = score_result(query, title, duration)
-            pic = raw.get("pic") or ""
-            thumbnail = f"https:{pic}" if pic.startswith("//") else pic or None
-            results.append(
-                SearchResult(
-                    id=f"bilibili:{bvid}",
-                    source="bilibili",
-                    videoId=bvid,
-                    title=title,
-                    artist=raw.get("author"),
-                    duration=duration,
-                    thumbnailUrl=thumbnail,
-                    pageUrl=raw.get("arcurl") or f"https://www.bilibili.com/video/{bvid}",
-                    confidence=confidence,
-                    tags=tags,
+            data = payload.get("data", {})
+            raw_results = data.get("result") or []
+            results: list[SearchResult] = []
+            for raw in raw_results:
+                if len(results) >= limit:
+                    break
+                bvid = raw.get("bvid")
+                if not isinstance(bvid, str) or not bvid.startswith("BV"):
+                    continue
+                title = _strip_html(raw.get("title") or "")
+                duration = _parse_duration(raw.get("duration"))
+                confidence, tags = score_result(query, title, duration)
+                pic = raw.get("pic") or ""
+                thumbnail = f"https:{pic}" if pic.startswith("//") else pic or None
+                results.append(
+                    SearchResult(
+                        id=f"bilibili:{bvid}",
+                        source="bilibili",
+                        videoId=bvid,
+                        title=title,
+                        artist=raw.get("author"),
+                        duration=duration,
+                        thumbnailUrl=thumbnail,
+                        pageUrl=raw.get("arcurl") or f"https://www.bilibili.com/video/{bvid}",
+                        confidence=confidence,
+                        tags=tags,
+                    )
                 )
-            )
-        if not results:
-            return await _search_html(client, query, limit)
-        return results
+            if not results:
+                return await _search_html(client, query, limit)
+            return results
 
 
 def _strip_html(value: str) -> str:
@@ -109,6 +109,8 @@ async def _search_html(client, query: str, limit: int) -> list[SearchResult]:
         thumbnail = f"https:{image}" if image and image.startswith("//") else image
         duration = _parse_duration(duration_match.group(1).strip() if duration_match else None)
         confidence, tags = score_result(query, title, duration)
+        if "query-match" not in tags and "partial-match" not in tags:
+            continue
 
         results.append(
             SearchResult(
